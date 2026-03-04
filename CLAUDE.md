@@ -24,6 +24,18 @@ No database. No auth. No Docker.
 
 ---
 
+## Frontend Structure Rules
+
+**No inline styles.** All styles must live in CSS modules (`.module.css`) co-located with their component. Never use the `style` prop or a `styles: Record<string, React.CSSProperties>` object in TSX files.
+
+**One component per file.** Each React component lives in its own file under `src/components/`. The `page.tsx` files are thin orchestrators — they manage state and wire components together, but contain no JSX beyond layout structure.
+
+**Use `api.ts` for all HTTP calls.** Never call `fetch()` directly in components or pages. The `src/services/api.ts` client handles base URL, headers, and error parsing. Import `api.get` / `api.post` from there.
+
+**No dead code.** If a feature is removed or was never wired up, delete its files entirely — components, routes, schemas, models, services. Dead code is not "harmless"; it creates confusion about what is actually used.
+
+---
+
 ## Project Structure
 
 ```
