@@ -1,6 +1,5 @@
-// In Next.js, VITE_ env vars become NEXT_PUBLIC_.
 // During dev, requests to /api/* are proxied to FastAPI via next.config.js rewrites.
-// This helper is for Client Components ("use client").
+// This helper works in both Server Components and Client Components ("use client").
 
 const BASE_URL =
   typeof window === "undefined"

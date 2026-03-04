@@ -18,19 +18,29 @@ services:
       - "8000:8000"
     env_file:
       - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://user:password@db:5432/myapp
+      CORS_ORIGINS: '["http://localhost:3000"]'
     depends_on:
       - db
     volumes:
       - ./backend:/app
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      target: deps
+    command: npm run dev
     ports:
       - "3000:3000"
     environment:
+      NODE_ENV: development
       NEXT_PUBLIC_API_URL: http://backend:8000
     depends_on:
       - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
 
 volumes:
   postgres_data:
