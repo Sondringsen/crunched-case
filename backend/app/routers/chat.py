@@ -175,8 +175,14 @@ def chat(req: ChatRequest) -> ChatResponse:
                         }
                     )
 
-            # Append assistant turn + tool results and continue
-            messages.append({"role": "assistant", "content": response.content})
+            # Convert SDK objects to plain dicts before appending (avoids pydantic by_alias bug)
+            content_dicts = []
+            for block in response.content:
+                if block.type == "text":
+                    content_dicts.append({"type": "text", "text": block.text})
+                elif block.type == "tool_use":
+                    content_dicts.append({"type": "tool_use", "id": block.id, "name": block.name, "input": block.input})
+            messages.append({"role": "assistant", "content": content_dicts})
             messages.append({"role": "user", "content": tool_results})
 
         else:

@@ -1,304 +1,138 @@
 # Project Context for Claude Code
 
-## Stack Overview
+## What this project is
 
-| Layer     | Technology                               |
-|-----------|------------------------------------------|
-| Backend   | Python 3.12, FastAPI, SQLAlchemy 2.x     |
-| Database  | PostgreSQL 16, Alembic for migrations    |
-| Frontend  | Next.js 14 (App Router), TypeScript      |
-| Auth      | JWT via python-jose + passlib            |
-| Dev env   | docker-compose (db + backend + frontend) |
+A simplified clone of **Crunched** — an Excel add-in with an AI agent that can read from and write to spreadsheets. The task pane is a React UI served by Next.js; the AI agent runs in a FastAPI backend using the Anthropic API.
+
+## Stack
+
+| Layer     | Technology                                      |
+|-----------|-------------------------------------------------|
+| Frontend  | Next.js 14 (App Router), TypeScript, Office.js  |
+| Backend   | Python 3.12, FastAPI, Anthropic SDK             |
+| Dev env   | Two local processes (no Docker needed)          |
+
+No database. No auth. No Docker.
 
 ---
 
 ## Project Structure
 
 ```
-project/
+crunched-case/
+├── certs/
+│   ├── localhost.pem          # mkcert HTTPS cert (for Next.js)
+│   └── localhost-key.pem
+├── manifest.xml               # Excel add-in manifest (sideloaded into ~/Library/…/wef/)
 ├── backend/
 │   ├── app/
-│   │   ├── main.py            # FastAPI app factory, middleware, router mount
-│   │   ├── dependencies.py    # Shared FastAPI dependencies (get_db, auth)
+│   │   ├── main.py            # FastAPI app factory (redirect_slashes=False)
 │   │   ├── core/
-│   │   │   ├── config.py      # Settings via pydantic-settings (.env)
-│   │   │   └── database.py    # SQLAlchemy engine, SessionLocal, Base, get_db
-│   │   ├── models/            # SQLAlchemy ORM models (one file per entity)
-│   │   ├── schemas/           # Pydantic schemas: *Create, *Read, *Update
-│   │   ├── routers/           # FastAPI routers (one file per resource)
-│   │   └── services/          # Business logic (called by routers)
-│   ├── alembic/               # DB migrations
-│   ├── tests/                 # pytest tests, conftest.py
+│   │   │   └── config.py      # Settings (ANTHROPIC_KEY from .env)
+│   │   └── routers/
+│   │       ├── __init__.py    # Registers chat router
+│   │       └── chat.py        # POST /api/v1/chat — AI agent endpoint
 │   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/
-│   ├── src/
-│   │   ├── app/               # Next.js App Router — one folder per route
-│   │   │   ├── layout.tsx     # Root layout (html/body shell)
-│   │   │   └── page.tsx       # Home page "/"
-│   │   ├── components/        # Reusable UI components (always Client or Server)
-│   │   ├── hooks/             # Custom hooks — must be used in Client Components
-│   │   ├── services/api.ts    # Typed fetch wrapper (works client + server side)
-│   │   ├── types/             # Shared TypeScript interfaces
-│   │   └── store/             # Global state (Context, Zustand, etc.)
-│   ├── next.config.js         # Rewrites /api/* → FastAPI backend
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── Dockerfile
-└── docker-compose.yml
+│   ├── start.sh               # uvicorn on http://localhost:8000 (plain HTTP)
+│   └── .env                   # ANTHROPIC_KEY=sk-ant-…
+└── frontend/
+    ├── src/
+    │   ├── app/
+    │   │   ├── layout.tsx     # Minimal root layout (no Office.js script tag here)
+    │   │   └── page.tsx       # Task pane chat UI ("use client")
+    │   ├── hooks/
+    │   │   └── useOffice.ts   # Office.js initialisation + getContext/applyOperations
+    │   └── types/
+    │       └── index.ts       # ChatMessage, WriteOperation, SpreadsheetContext, etc.
+    ├── next.config.js          # Rewrites /api/* → http://localhost:8000/api/*
+    └── package.json            # dev script uses --experimental-https with mkcert certs
 ```
-
----
-
-## Backend Conventions
-
-### Adding a new resource (e.g. `items`)
-
-1. **Model** — `app/models/item.py`
-   ```python
-   import uuid
-   from sqlalchemy import Column, Integer, String
-   from sqlalchemy.dialects.postgresql import UUID
-   from app.core.database import Base
-   from app.models.base import TimestampMixin
-
-   class Item(Base, TimestampMixin):
-       __tablename__ = "items"
-       id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-       name = Column(String, nullable=False)
-   ```
-   Then add `from app.models.item import Item` to `app/models/__init__.py`.
-
-2. **Schema** — `app/schemas/item.py`
-   ```python
-   from pydantic import BaseModel
-
-   class ItemBase(BaseModel):
-       name: str
-
-   class ItemCreate(ItemBase): pass
-   class ItemUpdate(BaseModel):
-       name: str | None = None  # all fields optional for PATCH
-
-   class ItemRead(ItemBase):
-       id: uuid.UUID
-       class Config:
-           from_attributes = True
-   ```
-   Add `import uuid` at the top of the schema file.
-
-3. **Service** — `app/services/item_service.py`
-   Pure functions that take a `db: Session` and domain objects. No HTTP logic here.
-
-4. **Router** — `app/routers/items.py`
-   ```python
-   from fastapi import APIRouter, Depends
-   from sqlalchemy.orm import Session
-   from app.dependencies import get_db
-
-   router = APIRouter()
-
-   @router.get("/", response_model=list[ItemRead])
-   def list_items(db: Session = Depends(get_db)):
-       ...
-   ```
-   Register it in `app/routers/__init__.py`:
-   ```python
-   from app.routers import items
-   router.include_router(items.router, prefix="/items", tags=["items"])
-   ```
-
-5. **Migration**
-   ```bash
-   alembic revision --autogenerate -m "add items table"
-   alembic upgrade head
-   ```
-
-### HTTP status codes to use
-- `200` — successful GET / PUT / PATCH
-- `201` — successful POST (resource created)
-- `204` — successful DELETE (no body)
-- `404` — not found → raise `HTTPException(status_code=404, detail="Not found")`
-- `422` — validation error (FastAPI handles this automatically via Pydantic)
-- `401` / `403` — unauthenticated / unauthorized
-
-### Error handling pattern
-```python
-from fastapi import HTTPException
-
-def get_item_or_404(db, item_id: uuid.UUID):
-    item = db.get(Item, item_id)
-    if not item:
-        raise HTTPException(status_code=404, detail="Item not found")
-    return item
-```
-
----
-
-## Database Conventions
-
-- Always use Alembic for schema changes — never modify the DB directly.
-- Use `TimestampMixin` (from `app/models/base.py`) on every model.
-- Foreign keys should always have an explicit `index=True`.
-- Always use `UUID` primary keys (`uuid.uuid4`) — never `Integer` serials, which are prone to race conditions and enumeration.
-
-### Accessing the database
-The project runs in Docker. Connect to the database with:
-```bash
-docker exec -it crunched-case-db-1 psql -d myapp -U user
-```
-
-### Useful Alembic commands
-```bash
-# Create a migration (run from backend/)
-alembic revision --autogenerate -m "describe what changed"
-
-# Apply migrations
-alembic upgrade head
-
-# Rollback one step
-alembic downgrade -1
-```
-
----
-
-## Frontend Conventions (Next.js App Router)
-
-### Server Components vs Client Components
-
-By default, every file in `src/app/` is a **Server Component** — it runs only on the server and can `async/await` directly.
-
-Add `"use client"` at the top of any file that uses:
-- `useState`, `useEffect`, or any other hook
-- Browser APIs (`localStorage`, `window`, etc.)
-- Event handlers (`onClick`, `onChange`, etc.)
-- The `useApi` hook or interactive UI
-
-```tsx
-// Server Component — no directive needed, can fetch directly
-export default async function ItemsPage() {
-  const items = await api.get<Item[]>("/items"); // runs server-side
-  return <ItemList items={items} />;
-}
-
-// Client Component — needs interactivity
-"use client";
-export default function ItemForm() {
-  const [name, setName] = useState("");
-  ...
-}
-```
-
-### Adding a new route
-
-Create a folder under `src/app/` with a `page.tsx`:
-```
-src/app/
-├── items/
-│   ├── page.tsx          → /items
-│   └── [id]/
-│       └── page.tsx      → /items/123
-```
-
-Dynamic route params are passed as props:
-```tsx
-export default function ItemDetailPage({ params }: { params: { id: string } }) {
-  ...
-}
-```
-
-### API calls
-Use the `api` helper from `src/services/api.ts` — it works on both server and client:
-```typescript
-import { api } from "@/services/api";
-
-const items = await api.get<Item[]>("/items");
-const created = await api.post<Item>("/items", { name: "foo" });
-await api.delete(`/items/${id}`);
-```
-
-### Data fetching in Client Components
-Use the `useApi` hook for read-only data:
-```typescript
-"use client";
-const { data, loading, error, refetch } = useApi(() => api.get<Item[]>("/items"));
-```
-
-For mutations (POST/PUT/DELETE) in Client Components:
-```typescript
-const [loading, setLoading] = useState(false);
-const handleDelete = async (id: number) => {
-  setLoading(true);
-  try {
-    await api.delete(`/items/${id}`);
-    refetch();
-  } finally {
-    setLoading(false);
-  }
-};
-```
-
-### Component structure
-- `app/**/page.tsx` — route entry points; prefer Server Components here
-- `components/` — shared UI; label with `"use client"` only if needed
-- `hooks/` — always Client Component territory (hooks don't work server-side)
-- Never put `useState`/`useEffect` in a Server Component
-
-### TypeScript
-- Define an interface for every API entity in `src/types/index.ts`
-- Always type API responses — never use `any`
-- Prefer plain function declarations over `React.FC`
-
-### Environment variables
-- Prefix with `NEXT_PUBLIC_` for variables needed in the browser
-- Server-only variables (no prefix) are safe and not exposed to the client
-- Set in `.env.local` locally; the example is in `.env.example`
 
 ---
 
 ## Running Locally
 
+**Terminal 1 — Backend (plain HTTP):**
 ```bash
-cp .env.example .env
-docker-compose up --build
-```
-- Frontend: http://localhost:3000
-- Backend: http://localhost:8000
-- API docs: http://localhost:8000/api/v1/docs
-
----
-
-## Testing
-```bash
-# Backend (from backend/)
-pytest tests/ -v
-
-# Single test file
-pytest tests/test_items.py -v
+cd backend && ./start.sh
 ```
 
----
+**Terminal 2 — Frontend (HTTPS via mkcert):**
+```bash
+cd frontend && npm run dev
+```
 
-## Common Pitfalls to Avoid
-
-- **Don't put business logic in routers.** Routers only validate input and call services.
-- **Don't forget to register models in `app/models/__init__.py`** — Alembic won't see them otherwise.
-- **Don't call `db.commit()` in tests** — the conftest rolls back automatically.
-- **Don't use `response_model` on DELETE endpoints** — return `Response(status_code=204)` instead.
-- **CORS** — if the frontend can't reach the backend, check `CORS_ORIGINS` in config.
-- **Next.js proxy** — for local dev, API calls go through Next.js rewrites in `next.config.js`, not directly to the backend.
-- **Forgetting `"use client"`** — if you get a "hooks can only be used in Client Components" error, add `"use client"` at the top of the file.
-- **`localStorage` in Server Components** — always guard with `typeof window !== "undefined"` or move to a Client Component.
+Frontend: https://localhost:3000
+Backend: http://localhost:8000 (never accessed directly by the browser)
 
 ---
 
-## Auth (when needed)
+## Architecture
 
-If the test requires authentication, the fastest pattern is:
+All API calls from the task pane go through the **Next.js rewrite proxy**:
 
-1. Hash passwords with `passlib`: `pwd_context.hash(password)`
-2. Issue JWT on login with `python-jose`
-3. Add a `get_current_user` dependency that decodes the token and returns the user
-4. Protect routes with `current_user: User = Depends(get_current_user)`
+```
+Excel WebView → https://localhost:3000/api/v1/chat   (same origin)
+                       ↓ next.config.js rewrite
+              → http://localhost:8000/api/v1/chat     (server-side, no CORS/SSL needed)
+```
 
-Token storage on the frontend: `localStorage.setItem("token", token)` — the `api.ts` helper already picks this up automatically (client-side only).
+This means:
+- The backend needs **no HTTPS** and no CORS config (it only receives requests from Next.js server)
+- The browser never makes a cross-origin request
+
+---
+
+## Key Implementation Details
+
+### Office.js initialisation (`useOffice.ts`)
+
+Excel's WebView pre-injects Office.js before the page loads. We must **not** load it again from CDN (that overwrites the host's version). The hook checks `typeof Office` and only loads the CDN script in a plain browser (for dev previews).
+
+```ts
+if (typeof Office !== "undefined") {
+  Office.onReady(() => setIsReady(true));   // inside Excel
+} else {
+  // load CDN script, then call onReady   // browser fallback
+}
+```
+
+### Context sent to the agent
+
+On every message, the frontend extracts:
+- Sheet names
+- Active sheet name
+- Used range values (capped at 500 rows × 100 cols)
+- Current selection address
+
+This is POSTed to `/api/v1/chat` alongside the user message.
+
+### Agent response
+
+The backend returns `{ reply: string, operations: WriteOperation[] }`. Operations are applied by the frontend via `Excel.run`.
+
+### FastAPI route conventions
+
+- `redirect_slashes=False` on the app — avoids 307 redirects that break the Next.js proxy
+- Route registered as `@router.post("")` (not `"/"`) so the path is `/api/v1/chat` with no trailing slash
+
+---
+
+## Loading the add-in in Excel (Mac)
+
+```bash
+cp manifest.xml ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef/
+```
+Quit and reopen Excel. Then: **Insert → Add-ins → My Add-ins → Crunched**
+
+---
+
+## HTTPS Setup (one-time)
+
+```bash
+brew install mkcert
+mkcert -install          # needs sudo password — run in terminal
+# certs already generated in certs/
+```
+
+The `npm run dev` script in `frontend/package.json` references the cert files automatically.
