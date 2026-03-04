@@ -4,14 +4,28 @@ export interface ChatMessage {
 }
 
 export interface WriteOperation {
+  type: "write";
   sheet: string;
   range: string;
   values: (string | number | boolean | null)[][];
 }
 
+export interface AddSheetOperation {
+  type: "add_sheet";
+  name: string;
+}
+
+export interface AppendRowOperation {
+  type: "append_row";
+  sheet: string;
+  values: (string | number | boolean | null)[];
+}
+
+export type Operation = WriteOperation | AddSheetOperation | AppendRowOperation;
+
 export interface ChatResponse {
   reply: string;
-  operations: WriteOperation[];
+  operations: Operation[];
   conversation_id: string;
 }
 

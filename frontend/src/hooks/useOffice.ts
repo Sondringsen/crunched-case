@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import type { SpreadsheetContext, WriteOperation } from "@/types";
+import type { Operation, SpreadsheetContext } from "@/types";
 
 const MAX_ROWS = 500;
 const MAX_COLS = 100;
@@ -70,14 +70,37 @@ export function useOffice() {
   }, [isReady]);
 
   const applyOperations = useCallback(
-    async (operations: WriteOperation[]) => {
+    async (operations: Operation[]) => {
       if (!isReady || operations.length === 0 || typeof Excel === "undefined") return;
 
       await Excel.run(async (ctx) => {
         for (const op of operations) {
-          const sheet = ctx.workbook.worksheets.getItem(op.sheet);
-          const range = sheet.getRange(op.range);
-          range.values = op.values as string[][];
+          if (op.type === "write") {
+            const sheet = ctx.workbook.worksheets.getItem(op.sheet);
+            const range = sheet.getRange(op.range);
+            range.values = op.values as string[][];
+          } else if (op.type === "add_sheet") {
+            const existing = ctx.workbook.worksheets.getItemOrNullObject(op.name);
+            existing.load("isNullObject");
+            await ctx.sync();
+            if (existing.isNullObject) {
+              ctx.workbook.worksheets.add(op.name);
+            }
+          } else if (op.type === "append_row") {
+            const sheet = ctx.workbook.worksheets.getItem(op.sheet);
+            const usedRange = sheet.getUsedRangeOrNullObject(true);
+            usedRange.load(["rowCount", "isNullObject"]);
+            await ctx.sync();
+
+            const HEADERS = ["Timestamp", "User Message", "Agent Reply", "Operations"];
+            if (usedRange.isNullObject) {
+              sheet.getRange("A1:D1").values = [HEADERS];
+              sheet.getRange("A2:D2").values = [op.values as string[]];
+            } else {
+              const nextRow = usedRange.rowCount + 1;
+              sheet.getRange(`A${nextRow}:D${nextRow}`).values = [op.values as string[]];
+            }
+          }
         }
         await ctx.sync();
       });

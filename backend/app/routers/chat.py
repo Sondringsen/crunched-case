@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic_ai.messages import ModelMessagesTypeAdapter
@@ -8,9 +9,19 @@ from app.agents.chat_agent import run_agent
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.conversation import Conversation
-from app.schemas.chat import ChatRequest, ChatResponse
+from app.schemas.chat import AddSheetOperation, AppendRowOperation, ChatRequest, ChatResponse, Operation
 
 router = APIRouter()
+
+
+def _ops_summary(operations: list[Operation]) -> str:
+    parts = []
+    for op in operations:
+        if op.type == "write":
+            parts.append(f"write {op.sheet}!{op.range}")
+        elif op.type == "add_sheet":
+            parts.append(f"add sheet '{op.name}'")
+    return "; ".join(parts) if parts else "none"
 
 
 @router.post("", response_model=ChatResponse)
@@ -43,6 +54,17 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
         message_history=prev_messages,
     )
 
+    # Auto-append Changes Log entry
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    log_operations: list[Operation] = [
+        AddSheetOperation(name="Changes Log"),
+        AppendRowOperation(
+            sheet="Changes Log",
+            values=[timestamp, req.message[:80], reply[:80], _ops_summary(operations)],
+        ),
+    ]
+    all_operations = operations + log_operations
+
     # Append display messages for this turn
     display.append({"role": "user", "content": req.message})
     display.append({"role": "assistant", "content": reply})
@@ -51,4 +73,4 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
     conv.display_messages_json = json.dumps(display)
     db.commit()
 
-    return ChatResponse(reply=reply, operations=operations, conversation_id=conv.id)
+    return ChatResponse(reply=reply, operations=all_operations, conversation_id=conv.id)
