@@ -1,20 +1,22 @@
-// Place shared TypeScript interfaces and types here.
-// One file per domain entity is also fine for larger projects.
-
-export interface Dog {
-  id: string;
-  name: string;
-  breed: string;
-  age: number | null;
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
 }
 
-export interface ApiError {
-  detail: string;
+export interface WriteOperation {
+  sheet: string;
+  range: string;
+  values: (string | number | boolean | null)[][];
 }
 
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  page: number;
-  size: number;
+export interface ChatResponse {
+  reply: string;
+  operations: WriteOperation[];
+}
+
+export interface SpreadsheetContext {
+  sheets: string[];
+  current_sheet: string;
+  data: (string | number | boolean | null)[][];
+  selection: string | null;
 }

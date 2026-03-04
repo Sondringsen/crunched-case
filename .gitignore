@@ -2,6 +2,7 @@ __pycache__/
 .DS_Store
 .env
 .venv/
+*.pem
 
 # Next.js
 frontend/.next/

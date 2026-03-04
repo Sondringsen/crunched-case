@@ -3,12 +3,16 @@ from typing import List
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "MyApp"
+    PROJECT_NAME: str = "Crunched"
     API_V1_STR: str = "/api/v1"
     DATABASE_URL: str = "postgresql://user:password@localhost:5432/myapp"
-    CORS_ORIGINS: List[str] = ["http://localhost:5173"]
+    CORS_ORIGINS: List[str] = [
+        "https://localhost:3000",
+        "http://localhost:3000",
+    ]
     SECRET_KEY: str = "changeme"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
+    ANTHROPIC_KEY: str = ""
 
     class Config:
         env_file = ".env"

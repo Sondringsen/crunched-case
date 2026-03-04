@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
-from app.routers import dogs
+from app.routers import chat
 
 router = APIRouter()
 
-router.include_router(dogs.router, prefix="/dogs", tags=["dogs"])
+router.include_router(chat.router, prefix="/chat", tags=["chat"])
