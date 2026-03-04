@@ -1,0 +1,63 @@
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.empty {
+  color: #94a3b8;
+  text-align: center;
+  margin-top: 40px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.bubble {
+  padding: 8px 10px;
+  border-radius: 8px;
+  max-width: 100%;
+  word-break: break-word;
+}
+
+.userBubble {
+  background: #e0e7ff;
+  align-self: flex-end;
+  margin-left: 20px;
+}
+
+.assistantBubble {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  align-self: flex-start;
+  margin-right: 20px;
+}
+
+.bubbleRole {
+  font-weight: 600;
+  font-size: 10px;
+  color: #64748b;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bubbleContent {
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.error {
+  background: #fee2e2;
+  color: #dc2626;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.dots {
+  display: inline-flex;
+  gap: 2px;
+}
