@@ -279,12 +279,11 @@ The current single agent handles everything. A multi-agent architecture would le
 ### Streaming responses
 Long agent turns currently block until complete. Switching to server-sent events (SSE) or WebSockets would let the task pane show partial replies and tool-call progress in real time, significantly improving perceived responsiveness.
 
-### Large workbook support
-The current implementation hard-caps the data sent to the agent at 500 rows × 100 columns, silently dropping anything beyond that. This is acceptable for small sheets but breaks down for real-world workbooks. A proper solution would involve three changes:
+### Multi-sheet context
+Currently only the active sheet's data is sent to the agent. Other sheets are passed as names only, so the agent cannot reason about data in non-active sheets without the user switching to them first. The fix is to add a `read_range(sheet, range)` tool (see below) and optionally send a lightweight summary (headers + row count) for every sheet upfront, letting the agent pull full data from any sheet on demand.
 
-- **Schema-first context**: Instead of dumping the full used range on every request, send only metadata upfront — sheet names, used-range dimensions, and column headers from row 1. This keeps the base prompt small regardless of workbook size.
-- **Tool-based range access**: Add a `read_range(sheet, range)` agent tool so the model can pull specific slices of data on demand. The agent requests only what it needs, avoiding both the hard cap and the cost of sending irrelevant data.
-- **Message history pruning**: Currently the full pydantic-ai message history (including all prior context payloads) is reloaded and resent on every turn. In a long conversation over a large sheet this grows unboundedly and will eventually hit the model's context window. A rolling-window or summarisation strategy would keep history token count stable.
+### Large workbook support
+The current implementation hard-caps the data sent to the agent at 500 rows × 100 columns, silently dropping anything beyond that. One possible fix to this is a server-side context store: the frontend uploads the full workbook data to a dedicated endpoint, the backend holds it in memory keyed by conversation ID, and the agent gets a `read_range(sheet, start_row, end_row)` tool that slices from the store on demand. The chat body then carries only lightweight metadata (sheet names, dimensions, column headers), keeping every request small regardless of workbook size. The store must be kept in sync: after every agent turn the frontend should re-upload any sheets that were written to, and Office.js change events (`worksheet.onChanged`) can trigger incremental updates when the user edits cells manually.
 
 ### More scalable infrastructure
 Several areas to grow into as usage scales:
