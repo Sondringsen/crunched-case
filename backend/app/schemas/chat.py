@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
+from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 CellValue = str | int | float | bool | None
 
@@ -20,14 +21,32 @@ class ChatRequest(BaseModel):
 
 
 class WriteOperation(BaseModel):
+    type: Literal["write"] = "write"
     sheet: str
     range: str
     values: list[list[CellValue]]
 
 
+class AddSheetOperation(BaseModel):
+    type: Literal["add_sheet"] = "add_sheet"
+    name: str
+
+
+class AppendRowOperation(BaseModel):
+    type: Literal["append_row"] = "append_row"
+    sheet: str
+    values: list[CellValue]
+
+
+Operation = Annotated[
+    Union[WriteOperation, AddSheetOperation, AppendRowOperation],
+    Field(discriminator="type"),
+]
+
+
 class ChatResponse(BaseModel):
     reply: str
-    operations: list[WriteOperation] = []
+    operations: list[Operation] = []
     conversation_id: uuid.UUID
 
 

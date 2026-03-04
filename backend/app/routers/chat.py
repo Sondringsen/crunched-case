@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic_ai.messages import ModelMessagesTypeAdapter
@@ -8,9 +9,25 @@ from app.agents.chat_agent import run_agent
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.conversation import Conversation
-from app.schemas.chat import ChatRequest, ChatResponse
+from app.schemas.chat import AddSheetOperation, AppendRowOperation, ChatRequest, ChatResponse, Operation
 
 router = APIRouter()
+
+
+def _log_rows(operations: list[Operation], timestamp: str) -> list[AppendRowOperation]:
+    rows = []
+    for op in operations:
+        if op.type == "write":
+            rows.append(AppendRowOperation(
+                sheet="Changes Log",
+                values=[timestamp, "write", op.sheet, op.range, json.dumps(op.values)],
+            ))
+        elif op.type == "add_sheet":
+            rows.append(AppendRowOperation(
+                sheet="Changes Log",
+                values=[timestamp, "add_sheet", op.name, "-", "-"],
+            ))
+    return rows
 
 
 @router.post("", response_model=ChatResponse)
@@ -43,6 +60,14 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
         message_history=prev_messages,
     )
 
+    # Auto-append Changes Log entries — one row per operation
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    log_rows = _log_rows(operations, timestamp)
+    log_operations: list[Operation] = (
+        [AddSheetOperation(name="Changes Log")] + log_rows if log_rows else []
+    )
+    all_operations = operations + log_operations
+
     # Append display messages for this turn
     display.append({"role": "user", "content": req.message})
     display.append({"role": "assistant", "content": reply})
@@ -51,4 +76,4 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
     conv.display_messages_json = json.dumps(display)
     db.commit()
 
-    return ChatResponse(reply=reply, operations=operations, conversation_id=conv.id)
+    return ChatResponse(reply=reply, operations=all_operations, conversation_id=conv.id)

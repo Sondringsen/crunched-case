@@ -8,7 +8,7 @@ from pydantic_ai.messages import ModelMessage
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
-from app.schemas.chat import SpreadsheetContext, WriteOperation
+from app.schemas.chat import AddSheetOperation, Operation, SpreadsheetContext, WriteOperation
 
 CellValue = str | int | float | bool | None
 
@@ -22,6 +22,7 @@ You help users understand, analyse, and transform their data.
 
 When you need to write data back to the spreadsheet, use the `write_cells` tool.
 You can call it multiple times if you need to write to several locations.
+When you need to create a new sheet, use the `add_sheet` tool.
 
 Guidelines:
 - Be concise and clear in your replies.
@@ -39,7 +40,7 @@ Guidelines:
 @dataclass
 class _Deps:
     context: SpreadsheetContext | None
-    operations: list[WriteOperation] = field(default_factory=list)
+    operations: list[Operation] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +52,21 @@ _agent: Agent[_Deps, str] = Agent(
     deps_type=_Deps,
     system_prompt=SYSTEM_PROMPT,
 )
+
+
+@_agent.tool
+def add_sheet(
+    ctx: RunContext[_Deps],
+    name: str,
+) -> str:
+    """Add a new sheet to the workbook.
+
+    Args:
+        ctx: Run context with accumulated operations.
+        name: Name to give the new worksheet.
+    """
+    ctx.deps.operations.append(AddSheetOperation(name=name))
+    return f"Queued creation of sheet '{name}'"
 
 
 @_agent.tool
@@ -112,7 +128,7 @@ def run_agent(
     context: SpreadsheetContext | None,
     api_key: str,
     message_history: list[ModelMessage] | None = None,
-) -> tuple[str, list[WriteOperation], bytes]:
+) -> tuple[str, list[Operation], bytes]:
     """Run the agent and return (reply, operations, all_messages_json bytes).
 
     The caller (router layer) is responsible for assigning the conversation ID
