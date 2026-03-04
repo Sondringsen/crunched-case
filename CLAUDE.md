@@ -4,6 +4,8 @@
 
 **Structure is more important than features.** Every piece of code must live in the right layer. Do not conflate routing, business logic, schemas, or prompts in a single file — even if it feels faster. A small codebase with clear separation of concerns is worth far more than a large one that's tangled. When adding new functionality, find the correct layer first, then write the code.
 
+**Resource IDs are assigned by the backend, never by the frontend or agent.** A new resource (e.g. a conversation) has no ID until the backend persists it. The router is responsible for creating the DB record, obtaining the ID, and constructing the final response schema with it. Inner layers (agent, tools) must not receive or return IDs — they operate on raw data only. This keeps schema state consistent: a non-optional `id` field in a response type is always guaranteed to be set, with no nullable workarounds required.
+
 ---
 
 ## What this project is

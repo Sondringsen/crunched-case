@@ -12,6 +12,7 @@ export interface WriteOperation {
 export interface ChatResponse {
   reply: string;
   operations: WriteOperation[];
+  conversation_id: string;
 }
 
 export interface SpreadsheetContext {
@@ -19,4 +20,14 @@ export interface SpreadsheetContext {
   current_sheet: string;
   data: (string | number | boolean | null)[][];
   selection: string | null;
+}
+
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  created_at: string;
+}
+
+export interface ConversationDetail extends ConversationSummary {
+  messages: ChatMessage[];
 }
