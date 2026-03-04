@@ -92,13 +92,13 @@ export function useOffice() {
             usedRange.load(["rowCount", "isNullObject"]);
             await ctx.sync();
 
-            const HEADERS = ["Timestamp", "User Message", "Agent Reply", "Operations"];
+            const HEADERS = ["Timestamp", "Type", "Sheet", "Range", "Values"];
             if (usedRange.isNullObject) {
-              sheet.getRange("A1:D1").values = [HEADERS];
-              sheet.getRange("A2:D2").values = [op.values as string[]];
+              sheet.getRange("A1:E1").values = [HEADERS];
+              sheet.getRange("A2:E2").values = [op.values as string[]];
             } else {
               const nextRow = usedRange.rowCount + 1;
-              sheet.getRange(`A${nextRow}:D${nextRow}`).values = [op.values as string[]];
+              sheet.getRange(`A${nextRow}:E${nextRow}`).values = [op.values as string[]];
             }
           }
         }

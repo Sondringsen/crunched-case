@@ -14,14 +14,20 @@ from app.schemas.chat import AddSheetOperation, AppendRowOperation, ChatRequest,
 router = APIRouter()
 
 
-def _ops_summary(operations: list[Operation]) -> str:
-    parts = []
+def _log_rows(operations: list[Operation], timestamp: str) -> list[AppendRowOperation]:
+    rows = []
     for op in operations:
         if op.type == "write":
-            parts.append(f"write {op.sheet}!{op.range}")
+            rows.append(AppendRowOperation(
+                sheet="Changes Log",
+                values=[timestamp, "write", op.sheet, op.range, json.dumps(op.values)],
+            ))
         elif op.type == "add_sheet":
-            parts.append(f"add sheet '{op.name}'")
-    return "; ".join(parts) if parts else "none"
+            rows.append(AppendRowOperation(
+                sheet="Changes Log",
+                values=[timestamp, "add_sheet", op.name, "-", "-"],
+            ))
+    return rows
 
 
 @router.post("", response_model=ChatResponse)
@@ -54,15 +60,12 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
         message_history=prev_messages,
     )
 
-    # Auto-append Changes Log entry
+    # Auto-append Changes Log entries — one row per operation
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    log_operations: list[Operation] = [
-        AddSheetOperation(name="Changes Log"),
-        AppendRowOperation(
-            sheet="Changes Log",
-            values=[timestamp, req.message[:80], reply[:80], _ops_summary(operations)],
-        ),
-    ]
+    log_rows = _log_rows(operations, timestamp)
+    log_operations: list[Operation] = (
+        [AddSheetOperation(name="Changes Log")] + log_rows if log_rows else []
+    )
     all_operations = operations + log_operations
 
     # Append display messages for this turn
