@@ -10,8 +10,22 @@ export function useOffice() {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    if (typeof Office === "undefined") return;
-    Office.onReady(() => setIsReady(true));
+    const init = () => {
+      if (typeof Office === "undefined") return;
+      Office.onReady(() => setIsReady(true));
+    };
+
+    if (typeof Office !== "undefined") {
+      // Inside Excel's WebView — Office.js is already injected by the host
+      init();
+    } else {
+      // Browser / dev preview — load Office.js from CDN then initialise
+      const script = document.createElement("script");
+      script.src =
+        "https://appsforoffice.microsoft.com/lib/1/hosted/office.js";
+      script.onload = init;
+      document.head.appendChild(script);
+    }
   }, []);
 
   const getContext = useCallback(async (): Promise<SpreadsheetContext | null> => {

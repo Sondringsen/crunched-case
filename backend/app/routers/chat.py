@@ -124,7 +124,7 @@ def _build_context_text(ctx: SpreadsheetContext | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-@router.post("/", response_model=ChatResponse)
+@router.post("", response_model=ChatResponse)
 def chat(req: ChatRequest) -> ChatResponse:
     if not settings.ANTHROPIC_KEY:
         raise HTTPException(status_code=500, detail="ANTHROPIC_KEY not configured")

@@ -4,9 +4,6 @@ import { useState, useRef, useEffect } from "react";
 import { useOffice } from "@/hooks/useOffice";
 import type { ChatMessage, ChatResponse } from "@/types";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "https://localhost:8000";
-
 export default function TaskPane() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -32,7 +29,7 @@ export default function TaskPane() {
     try {
       const context = await getContext();
 
-      const res = await fetch(`${API_URL}/api/v1/chat`, {
+      const res = await fetch("/api/v1/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, context }),
