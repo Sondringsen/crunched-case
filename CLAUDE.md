@@ -56,13 +56,15 @@ project/
 
 1. **Model** — `app/models/item.py`
    ```python
+   import uuid
    from sqlalchemy import Column, Integer, String
+   from sqlalchemy.dialects.postgresql import UUID
    from app.core.database import Base
    from app.models.base import TimestampMixin
 
    class Item(Base, TimestampMixin):
        __tablename__ = "items"
-       id = Column(Integer, primary_key=True, index=True)
+       id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
        name = Column(String, nullable=False)
    ```
    Then add `from app.models.item import Item` to `app/models/__init__.py`.
@@ -79,10 +81,11 @@ project/
        name: str | None = None  # all fields optional for PATCH
 
    class ItemRead(ItemBase):
-       id: int
+       id: uuid.UUID
        class Config:
            from_attributes = True
    ```
+   Add `import uuid` at the top of the schema file.
 
 3. **Service** — `app/services/item_service.py`
    Pure functions that take a `db: Session` and domain objects. No HTTP logic here.
@@ -123,7 +126,7 @@ project/
 ```python
 from fastapi import HTTPException
 
-def get_item_or_404(db, item_id: int):
+def get_item_or_404(db, item_id: uuid.UUID):
     item = db.get(Item, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -137,7 +140,13 @@ def get_item_or_404(db, item_id: int):
 - Always use Alembic for schema changes — never modify the DB directly.
 - Use `TimestampMixin` (from `app/models/base.py`) on every model.
 - Foreign keys should always have an explicit `index=True`.
-- Use `Integer` primary keys unless the spec requires UUIDs.
+- Always use `UUID` primary keys (`uuid.uuid4`) — never `Integer` serials, which are prone to race conditions and enumeration.
+
+### Accessing the database
+The project runs in Docker. Connect to the database with:
+```bash
+docker exec -it crunched-case-db-1 psql -d myapp -U user
+```
 
 ### Useful Alembic commands
 ```bash
@@ -249,7 +258,6 @@ const handleDelete = async (id: number) => {
 
 ## Running Locally
 
-### Option A — docker-compose (easiest)
 ```bash
 cp .env.example .env
 docker-compose up --build
@@ -257,22 +265,6 @@ docker-compose up --build
 - Frontend: http://localhost:3000
 - Backend: http://localhost:8000
 - API docs: http://localhost:8000/api/v1/docs
-
-### Option B — manual
-```bash
-# Backend
-cd backend
-cp .env.example .env   # fill in DATABASE_URL
-pip install -r requirements.txt
-alembic upgrade head
-uvicorn app.main:app --reload --port 8000
-
-# Frontend
-cd frontend
-cp .env.example .env.local
-npm install
-npm run dev            # runs on http://localhost:3000
-```
 
 ---
 

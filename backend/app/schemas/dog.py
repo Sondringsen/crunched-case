@@ -1,4 +1,6 @@
 from pydantic import BaseModel
+import uuid
+
 
 
 class DogBase(BaseModel):
@@ -12,7 +14,7 @@ class DogCreate(DogBase):
 
 
 class DogRead(DogBase):
-    id: int
+    id: uuid.UUID
 
     class Config:
         from_attributes = True

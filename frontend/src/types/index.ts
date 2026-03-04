@@ -2,7 +2,7 @@
 // One file per domain entity is also fine for larger projects.
 
 export interface Dog {
-  id: number;
+  id: string;
   name: string;
   breed: string;
   age: number | null;
