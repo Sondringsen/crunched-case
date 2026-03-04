@@ -1,5 +1,11 @@
 # Project Context for Claude Code
 
+## Engineering Philosophy
+
+**Structure is more important than features.** Every piece of code must live in the right layer. Do not conflate routing, business logic, schemas, or prompts in a single file — even if it feels faster. A small codebase with clear separation of concerns is worth far more than a large one that's tangled. When adding new functionality, find the correct layer first, then write the code.
+
+---
+
 ## What this project is
 
 A simplified clone of **Crunched** — an Excel add-in with an AI agent that can read from and write to spreadsheets. The task pane is a React UI served by Next.js; the AI agent runs in a FastAPI backend using the Anthropic API.
@@ -29,9 +35,13 @@ crunched-case/
 │   │   ├── main.py            # FastAPI app factory (redirect_slashes=False)
 │   │   ├── core/
 │   │   │   └── config.py      # Settings (ANTHROPIC_KEY from .env)
+│   │   ├── schemas/
+│   │   │   └── chat.py        # Pydantic models: ChatRequest, ChatResponse, WriteOperation, etc.
+│   │   ├── agents/
+│   │   │   └── chat_agent.py  # TOOLS, SYSTEM_PROMPT, run_agent() — all AI logic lives here
 │   │   └── routers/
 │   │       ├── __init__.py    # Registers chat router
-│   │       └── chat.py        # POST /api/v1/chat — AI agent endpoint
+│   │       └── chat.py        # Thin HTTP layer: validates request, calls run_agent(), returns response
 │   ├── requirements.txt
 │   ├── start.sh               # uvicorn on http://localhost:8000 (plain HTTP)
 │   └── .env                   # ANTHROPIC_KEY=sk-ant-…
