@@ -4,9 +4,11 @@ import json
 from dataclasses import dataclass, field
 
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.messages import ModelMessage
 from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.providers.anthropic import AnthropicProvider
 
-from app.schemas.chat import ChatResponse, SpreadsheetContext, WriteOperation
+from app.schemas.chat import SpreadsheetContext, WriteOperation
 
 CellValue = str | int | float | bool | None
 
@@ -44,10 +46,9 @@ class _Deps:
 # Agent definition
 # ---------------------------------------------------------------------------
 
+# Model is provided at runtime in run_agent() to avoid requiring env vars at import time
 _agent: Agent[_Deps, str] = Agent(
-    "anthropic:claude-opus-4-6",
     deps_type=_Deps,
-    result_type=str,
     system_prompt=SYSTEM_PROMPT,
 )
 
@@ -106,12 +107,27 @@ def _build_context_text(ctx: SpreadsheetContext | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def run_agent(message: str, context: SpreadsheetContext | None, api_key: str) -> ChatResponse:
+def run_agent(
+    message: str,
+    context: SpreadsheetContext | None,
+    api_key: str,
+    message_history: list[ModelMessage] | None = None,
+) -> tuple[str, list[WriteOperation], bytes]:
+    """Run the agent and return (reply, operations, all_messages_json bytes).
+
+    The caller (router layer) is responsible for assigning the conversation ID
+    and constructing the final response schema.
+    """
     deps = _Deps(context=context)
     context_text = _build_context_text(context)
     user_content = f"{message}\n\n---\nSpreadsheet context:\n{context_text}"
 
-    model = AnthropicModel("claude-opus-4-6", api_key=api_key)
-    result = _agent.run_sync(user_content, deps=deps, model=model)
+    model = AnthropicModel("claude-opus-4-6", provider=AnthropicProvider(api_key=api_key))
+    result = _agent.run_sync(
+        user_content,
+        deps=deps,
+        model=model,
+        message_history=message_history or [],
+    )
 
-    return ChatResponse(reply=result.data, operations=deps.operations)
+    return result.output, deps.operations, result.all_messages_json()

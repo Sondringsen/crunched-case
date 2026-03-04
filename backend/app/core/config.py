@@ -5,7 +5,7 @@ from typing import List
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Crunched"
     API_V1_STR: str = "/api/v1"
-    DATABASE_URL: str = "postgresql://user:password@localhost:5432/myapp"
+    DATABASE_URL: str = "postgresql://sondrerogde@localhost:5432/crunched"
     CORS_ORIGINS: List[str] = [
         "https://localhost:3000",
         "http://localhost:3000",

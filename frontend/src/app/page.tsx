@@ -2,19 +2,77 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useOffice } from "@/hooks/useOffice";
-import type { ChatMessage, ChatResponse } from "@/types";
+import type {
+  ChatMessage,
+  ChatResponse,
+  ConversationSummary,
+  ConversationDetail,
+} from "@/types";
 
 export default function TaskPane() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
   const { isReady, getContext, applyOperations } = useOffice();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Load conversation list on mount
+  useEffect(() => {
+    fetchConversations();
+  }, []);
+
+  // Close history dropdown when clicking outside
+  useEffect(() => {
+    if (!showHistory) return;
+    const handler = (e: MouseEvent) => {
+      if (historyRef.current && !historyRef.current.contains(e.target as Node)) {
+        setShowHistory(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showHistory]);
+
+  const fetchConversations = async () => {
+    try {
+      const res = await fetch("/api/v1/conversations");
+      if (res.ok) {
+        const data: ConversationSummary[] = await res.json();
+        setConversations(data);
+      }
+    } catch {
+      // silently ignore — history list is non-critical
+    }
+  };
+
+  const loadConversation = async (id: string) => {
+    setShowHistory(false);
+    try {
+      const res = await fetch(`/api/v1/conversations/${id}`);
+      if (!res.ok) return;
+      const data: ConversationDetail = await res.json();
+      setMessages(data.messages);
+      setConversationId(data.id);
+    } catch {
+      setError("Failed to load conversation");
+    }
+  };
+
+  const startNewChat = () => {
+    setMessages([]);
+    setConversationId(null);
+    setError(null);
+    setShowHistory(false);
+  };
 
   const send = async () => {
     const text = input.trim();
@@ -32,7 +90,7 @@ export default function TaskPane() {
       const res = await fetch("/api/v1/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, context }),
+        body: JSON.stringify({ message: text, context, conversation_id: conversationId }),
       });
 
       if (!res.ok) {
@@ -45,10 +103,14 @@ export default function TaskPane() {
         ...prev,
         { role: "assistant", content: data.reply },
       ]);
+      setConversationId(data.conversation_id);
 
       if (data.operations?.length > 0) {
         await applyOperations(data.operations);
       }
+
+      // Refresh conversation list to include new/updated conversation
+      fetchConversations();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -67,13 +129,51 @@ export default function TaskPane() {
     <div style={styles.container}>
       <div style={styles.header}>
         <span style={styles.logo}>Crunched</span>
-        <span style={styles.status}>
-          {isReady ? (
-            <span style={{ color: "#22c55e" }}>● Excel connected</span>
-          ) : (
-            <span style={{ color: "#f59e0b" }}>● Connecting...</span>
-          )}
-        </span>
+        <div style={styles.headerRight}>
+          <span style={styles.status}>
+            {isReady ? (
+              <span style={{ color: "#22c55e" }}>● Excel connected</span>
+            ) : (
+              <span style={{ color: "#f59e0b" }}>● Connecting...</span>
+            )}
+          </span>
+          <div style={{ position: "relative" }} ref={historyRef}>
+            <button
+              style={styles.iconBtn}
+              onClick={() => setShowHistory((v) => !v)}
+              title="Chat history"
+            >
+              ☰
+            </button>
+            {showHistory && (
+              <div style={styles.historyDropdown}>
+                <div style={styles.historyHeader}>History</div>
+                {conversations.length === 0 ? (
+                  <div style={styles.historyEmpty}>No conversations yet</div>
+                ) : (
+                  conversations.map((c) => (
+                    <button
+                      key={c.id}
+                      style={{
+                        ...styles.historyItem,
+                        ...(c.id === conversationId ? styles.historyItemActive : {}),
+                      }}
+                      onClick={() => loadConversation(c.id)}
+                    >
+                      <div style={styles.historyTitle}>{c.title}</div>
+                      <div style={styles.historyDate}>
+                        {new Date(c.created_at).toLocaleDateString()}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+          <button style={styles.iconBtn} onClick={startNewChat} title="New chat">
+            +
+          </button>
+        </div>
       </div>
 
       <div style={styles.messages}>
@@ -161,8 +261,83 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 15,
     letterSpacing: "-0.5px",
   },
+  headerRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+  },
   status: {
     fontSize: 11,
+    marginRight: 4,
+  },
+  iconBtn: {
+    background: "rgba(255,255,255,0.12)",
+    border: "none",
+    borderRadius: 4,
+    color: "#fff",
+    cursor: "pointer",
+    fontSize: 14,
+    fontWeight: 600,
+    width: 26,
+    height: 26,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 0,
+  },
+  historyDropdown: {
+    position: "absolute",
+    top: "calc(100% + 6px)",
+    right: 0,
+    width: 240,
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 8,
+    boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+    zIndex: 100,
+    maxHeight: 320,
+    overflowY: "auto",
+  },
+  historyHeader: {
+    padding: "8px 12px",
+    fontWeight: 700,
+    fontSize: 11,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.5px",
+    color: "#64748b",
+    borderBottom: "1px solid #e2e8f0",
+  },
+  historyEmpty: {
+    padding: "12px",
+    color: "#94a3b8",
+    fontSize: 12,
+    textAlign: "center" as const,
+  },
+  historyItem: {
+    display: "block",
+    width: "100%",
+    textAlign: "left" as const,
+    background: "none",
+    border: "none",
+    borderBottom: "1px solid #f1f5f9",
+    padding: "8px 12px",
+    cursor: "pointer",
+    color: "#1e293b",
+  },
+  historyItemActive: {
+    background: "#eff6ff",
+  },
+  historyTitle: {
+    fontSize: 12,
+    fontWeight: 500,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap" as const,
+  },
+  historyDate: {
+    fontSize: 10,
+    color: "#94a3b8",
+    marginTop: 2,
   },
   messages: {
     flex: 1,
